@@ -1,13 +1,14 @@
+use colored::Colorize;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans, Text},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Clear},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
-use crate::app::App;
+use crate::app::{App, Gamemode};
 
 pub fn title<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
@@ -47,7 +48,7 @@ pub fn title<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                 .fg(Color::LightBlue)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol(" "); // TODO configuration to replace this with a standard unicode symbol
+        .highlight_symbol(&app.config.list_hightlight_symbol);
 
     f.render_stateful_widget(items, chunks[2], &mut app.title_list.state);
 }
@@ -60,7 +61,7 @@ pub fn game<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             [
                 Constraint::Length(3),
                 Constraint::Min(1),
-                Constraint::Length(5),
+                Constraint::Length(3),
                 Constraint::Length(3),
             ]
             .as_ref(),
@@ -68,10 +69,9 @@ pub fn game<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .split(f.size());
 
     // prompt
-    let prompt = Paragraph::new(Text::from(Span::styled(
-        &app.prompt,
-        Style::default().add_modifier(Modifier::BOLD),
-    )));
+    let prompt = Paragraph::new(app.prompt.to_owned())
+        .alignment(Alignment::Center)
+        .style(Style::default().add_modifier(Modifier::BOLD));
     f.render_widget(prompt, chunks[0]);
 
     // time remaining bar
@@ -94,6 +94,7 @@ pub fn game<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     f.render_widget(progress, chunks[1]);
 
     // input
+    // TODO color substring equaling prompt green
     let input_field = Paragraph::new(app.input.string.as_ref())
         .style(Style::default())
         .block(Block::default().borders(Borders::ALL));
@@ -103,8 +104,18 @@ pub fn game<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         chunks[2].y + 1,
     );
 
+    let hearts_text = match app.config.gamemode {
+        Gamemode::Practice => "practice".to_string(),
+        Gamemode::LimitedLives => "".repeat(app.lives),
+        Gamemode::InfiniteLives => "∞".to_string(),
+    };
+    let hearts = Paragraph::new(hearts_text)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Red));
+    f.render_widget(hearts, chunks[3]);
+
     if app.paused {
-        // NOTE this only seems to work in full screen
+        // NOTE this only seems to work well in full screen
         let items: Vec<ListItem> = app
             .pause_list
             .items
@@ -113,18 +124,18 @@ pub fn game<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             .collect();
 
         let items = List::new(items)
-            .block(Block::default()
-                .title("Paused")
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+            .block(
+                Block::default()
+                    .title("Paused")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             )
             .highlight_style(
                 Style::default()
                     .fg(Color::LightBlue)
                     .add_modifier(Modifier::BOLD),
             )
-            .highlight_symbol(" "); // TODO configuration to replace this with a standard unicode symbol
-
+            .highlight_symbol(&app.config.list_hightlight_symbol);
 
         let area = centered_rect(40, 60, f.size());
         f.render_widget(Clear, area);
@@ -141,7 +152,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
                 Constraint::Percentage(percent_y),
                 Constraint::Percentage((100 - percent_y) / 2),
             ]
-                .as_ref(),
+            .as_ref(),
         )
         .split(r);
 
@@ -153,7 +164,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
                 Constraint::Percentage(percent_x),
                 Constraint::Percentage((100 - percent_x) / 2),
             ]
-                .as_ref(),
+            .as_ref(),
         )
         .split(popup_layout[1])[1]
 }

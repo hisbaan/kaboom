@@ -18,29 +18,16 @@ use tui::{
     Terminal,
 };
 
-use app::{ActiveScreen, App, Input, StatefulList};
+use app::{ActiveScreen, App, Config, Gamemode, Input, StatefulList};
 use ui::{game, title};
 
 /// TODO
 /// - title screen
 /// - read from config into a struct that is merged with default
 /// - settings menu that edits config file
+/// - if all letters are used, lives += 1 up to max lives
 ///
 /// - Write script to package instead of having to remember the same process over and over
-
-// enum Gamemode {
-//     Practice,
-//     InfiniteLives,
-//     LimitedLives,
-// }
-//
-// struct Config {
-//     gamemode: Gamemode,
-//     minwpp: usize,
-//     // help/suggestions
-//     // list answers
-//     // vim-like bindings
-// }
 
 fn main() -> Result<()> {
     // setup a terminal
@@ -50,6 +37,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Start game
     let app = init_app();
     let tick_rate = Duration::from_millis(17);
     let res = run_app(&mut terminal, app, tick_rate);
@@ -145,13 +133,16 @@ fn run_app<B: Backend>(
                                                 return Ok(());
                                             }
                                             match app.pause_list.items[i] {
+                                                // TODO make these into a tuple and include the function as a closure
                                                 "Resume" => app.paused = false,
                                                 "Main Menu" => {
                                                     app.active_screen = ActiveScreen::Title
-                                                } // TODO kill game
+                                                }
+                                                // TODO kill game
                                                 "Restart" => {
                                                     // kill game then
                                                     start_game(&mut app);
+                                                    app.paused = false;
                                                 }
                                                 _ => {}
                                             }
@@ -165,7 +156,8 @@ fn run_app<B: Backend>(
                             match key.code {
                                 KeyCode::Enter => {
                                     if check_word(&mut app) {
-                                        next_word(&mut app);
+                                        // TODO if correct, should the time stack?
+                                        next_turn(&mut app);
                                         app.input.string = "".to_string();
                                     }
                                 }
@@ -185,13 +177,20 @@ fn run_app<B: Backend>(
                 }
                 if matches!(app.active_screen, ActiveScreen::Game)
                     && !app.paused
+                    && !matches!(app.config.gamemode, Gamemode::Practice)
                     && last_tick.elapsed() >= tick_rate
                 {
                     if app.time_left >= 1 {
                         app.time_left -= 1;
                     } else {
                         // time up: end word, subtract life
-                        next_word(&mut app);
+                        if matches!(app.config.gamemode, Gamemode::LimitedLives) {
+                            app.lives -= 1;
+                            if app.lives == 0 {
+                                app.active_screen = ActiveScreen::Title; // TODO ActiveScreen::GameOver;
+                            }
+                        }
+                        next_turn(&mut app);
                     }
                     last_tick = Instant::now();
                 }
@@ -212,38 +211,44 @@ fn init_app() -> App<'static> {
     // dictionary_hash_set.insert("AALS".to_string());
     let dictionary_hash_set = HashSet::from_iter(dictionary.clone());
 
-    // run app
+    let config = Config::default();
     let input = Input::default();
+
     App {
         active_screen: ActiveScreen::Title,
         // TODO replace these list strings with an enum of sort
         title_list: StatefulList::with_items(vec!["Start", "Settings", "Quit"]),
         input,
         prompt: "".to_string(),
-        time_left: 320, // 320 units is 5 s @ 64 tps
+        time_left: config.time_per_turn * 64,
+        lives: config.starting_lives + 1,
         paused: false,
         pause_list: StatefulList::with_items(vec!["Resume", "Main Menu", "Restart", "Quit"]),
         dictionary,
         dictionary_hash_set,
+        config,
     }
 }
 
 fn start_game(app: &mut App) {
-    next_word(app);
     // set lives, other options
+    app.lives = app.config.starting_lives + 1;
+    next_turn(app);
 }
 
-fn next_word(app: &mut App) {
-    app.prompt = generate_prompt(app, 500); // TODO get this 500 from config
-    app.time_left = 320; // TODO get this value from config
+fn next_turn(app: &mut App) {
+    app.prompt = generate_prompt(app, app.config.min_wpp);
+    app.input.string = "".to_string();
+    app.time_left = app.config.time_per_turn * 64;
 }
 
 fn generate_prompt(app: &mut App, wpp: usize) -> String {
     let mut rng = rand::thread_rng();
+    let coin = rng.gen::<f64>();
+    let upper_bound = if coin > 0.8 { 3 } else { 2 };
     loop {
         let mut prompt = "".to_string();
-        // TODO make the upper bound of this random with a 3/4 chance of 2 and a 1/4 chance of 3
-        for _ in 0..2 {
+        for _ in 0..upper_bound {
             prompt.push(rng.gen_range(b'A'..b'Z') as char)
         }
         let mut counter = 0;

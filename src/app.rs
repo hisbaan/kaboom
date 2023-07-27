@@ -8,10 +8,12 @@ pub struct App<'a> {
     pub input: Input,
     pub prompt: String,
     pub time_left: usize,
+    pub lives: usize,
     pub paused: bool,
     pub pause_list: StatefulList<&'a str>,
     pub dictionary: Vec<String>,
-    pub dictionary_hash_set: HashSet<String>
+    pub dictionary_hash_set: HashSet<String>,
+    pub config: Config,
 }
 
 pub enum ActiveScreen {
@@ -19,6 +21,34 @@ pub enum ActiveScreen {
     Settings,
     Game,
     GameOver,
+}
+
+pub enum Gamemode {
+    Practice,
+    InfiniteLives,
+    LimitedLives,
+}
+
+pub struct Config {
+    pub gamemode: Gamemode,
+    pub min_wpp: usize,
+    pub time_per_turn: usize,
+    pub starting_lives: usize,
+    pub max_lives: usize,
+    pub list_hightlight_symbol: String,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            gamemode: Gamemode::LimitedLives,
+            min_wpp: 500,
+            time_per_turn: 5,
+            starting_lives: 2,
+            max_lives: 3,
+            list_hightlight_symbol: " ".to_string(),
+        }
+    }
 }
 
 pub struct Input {
