@@ -202,7 +202,7 @@ fn run_app<B: Backend>(
 
 fn init_app() -> App<'static> {
     // Get word list
-    let word_list = read_to_string("src/dict").expect("Error reading file");
+    let word_list = include_str!("dict");
     let dictionary: Vec<String> = word_list
         .split('\n')
         .map(|s| -> String { s.strip_suffix("\r").unwrap_or(s).to_string() })
